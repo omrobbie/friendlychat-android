@@ -17,9 +17,11 @@ package com.google.firebase.codelab.friendlychat;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -27,10 +29,12 @@ import android.text.Editable;
 import android.text.InputFilter;
 import android.text.TextWatcher;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -38,11 +42,22 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.bumptech.glide.Glide;
+import com.firebase.ui.database.FirebaseRecyclerAdapter;
+import com.firebase.ui.database.FirebaseRecyclerOptions;
+import com.firebase.ui.database.SnapshotParser;
 import com.google.android.gms.auth.api.Auth;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
 
 import de.hdodenhof.circleimageview.CircleImageView;
 
@@ -88,6 +103,12 @@ public class MainActivity extends AppCompatActivity
     // Firebase instance variables
     private FirebaseAuth firebaseAuth;
     private FirebaseUser firebaseUser;
+    //---
+
+    // Read firebase data
+    private DatabaseReference databaseReference;
+    private FirebaseRecyclerAdapter<FriendlyMessage, MessageViewHolder> adapter;
+    //---
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -113,6 +134,7 @@ public class MainActivity extends AppCompatActivity
                 mPhotoUrl = firebaseUser.getPhotoUrl().toString();
             }
         }
+        //---
 
         mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .enableAutoManage(this /* FragmentActivity */, this /* OnConnectionFailedListener */)
@@ -126,7 +148,101 @@ public class MainActivity extends AppCompatActivity
         mLinearLayoutManager.setStackFromEnd(true);
         mMessageRecyclerView.setLayoutManager(mLinearLayoutManager);
 
-        mProgressBar.setVisibility(ProgressBar.INVISIBLE);
+        // New child entries
+        // mProgressBar.setVisibility(ProgressBar.INVISIBLE);
+        databaseReference = FirebaseDatabase.getInstance().getReference();
+        SnapshotParser<FriendlyMessage> parser = new SnapshotParser<FriendlyMessage>() {
+            @Override
+            public FriendlyMessage parseSnapshot(DataSnapshot snapshot) {
+                FriendlyMessage friendlyMessage = snapshot.getValue(FriendlyMessage.class);
+                if (friendlyMessage != null) friendlyMessage.setId(snapshot.getKey());
+                return friendlyMessage;
+            }
+        };
+
+        DatabaseReference messageRef = databaseReference.child(MESSAGES_CHILD);
+        FirebaseRecyclerOptions<FriendlyMessage> options = new FirebaseRecyclerOptions.Builder<FriendlyMessage>()
+                .setQuery(messageRef, parser)
+                .build();
+
+        adapter = new FirebaseRecyclerAdapter<FriendlyMessage, MessageViewHolder>(options) {
+            @Override
+            protected void onBindViewHolder(final MessageViewHolder holder, int position, FriendlyMessage model) {
+                mProgressBar.setVisibility(View.INVISIBLE);
+                if (model.getText() != null) {
+                    holder.messageTextView.setText(model.getText());
+                    holder.messageTextView.setVisibility(View.VISIBLE);
+                    holder.messageImageView.setVisibility(View.GONE);
+                } else {
+                    String imageUrl = model.getImageUrl();
+
+                    if (imageUrl.startsWith("gs://")) {
+                        StorageReference storageReference = FirebaseStorage.getInstance()
+                                .getReferenceFromUrl(imageUrl);
+                        storageReference.getDownloadUrl().addOnCompleteListener(new OnCompleteListener<Uri>() {
+                            @Override
+                            public void onComplete(@NonNull Task<Uri> task) {
+                                if (task.isSuccessful()) {
+                                    String downloadUrl = task.getResult().toString();
+                                    Glide.with(holder.messageImageView.getContext())
+                                            .load(downloadUrl)
+                                            .into(holder.messageImageView);
+                                } else {
+                                    Log.w(TAG, "onComplete: Getting download url was not successful!", task.getException());
+                                }
+                            }
+                        });
+                    } else {
+                        Glide.with(holder.messageImageView.getContext())
+                                .load(model.getImageUrl())
+                                .into(holder.messageImageView);
+                    }
+                    holder.messageImageView.setVisibility(View.VISIBLE);
+                    holder.messageTextView.setVisibility(View.GONE);
+                }
+
+                holder.messageTextView.setText(model.getName());
+
+                if (model.getPhotoUrl() == null) {
+                    holder.messageImageView.setImageDrawable(
+                            ContextCompat.getDrawable(
+                                    MainActivity.this,
+                                    R.drawable.ic_account_circle_black_36dp
+                            )
+                    );
+                } else {
+                    Glide.with(MainActivity.this)
+                            .load(model.getPhotoUrl())
+                            .into(holder.messageImageView);
+                }
+            }
+
+            @Override
+            public MessageViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+                return new MessageViewHolder(LayoutInflater.from(parent.getContext()).inflate(
+                        R.layout.item_message, parent, false
+                ));
+            }
+        };
+
+        adapter.registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
+            @Override
+            public void onItemRangeInserted(int positionStart, int itemCount) {
+                super.onItemRangeInserted(positionStart, itemCount);
+
+                int friendlyMessageCount = adapter.getItemCount();
+                int lastVisiblePosition = mLinearLayoutManager.findLastCompletelyVisibleItemPosition();
+
+                if (lastVisiblePosition == -1 ||
+                        (positionStart >= (friendlyMessageCount - 1) &&
+                                lastVisiblePosition == (positionStart - 1))) {
+                    mMessageRecyclerView.scrollToPosition(positionStart);
+                }
+            }
+        });
+
+        mMessageRecyclerView.setAdapter(adapter);
+        //---
 
         mMessageEditText = (EditText) findViewById(R.id.messageEditText);
         mMessageEditText.setFilters(new InputFilter[]{new InputFilter.LengthFilter(mSharedPreferences
@@ -176,12 +292,14 @@ public class MainActivity extends AppCompatActivity
 
     @Override
     public void onPause() {
+        adapter.stopListening();
         super.onPause();
     }
 
     @Override
     public void onResume() {
         super.onResume();
+        adapter.startListening();
     }
 
     @Override
