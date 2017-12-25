@@ -46,6 +46,7 @@ import com.bumptech.glide.Glide;
 import com.firebase.ui.database.FirebaseRecyclerAdapter;
 import com.firebase.ui.database.FirebaseRecyclerOptions;
 import com.firebase.ui.database.SnapshotParser;
+import com.google.android.gms.appinvite.AppInviteInvitation;
 import com.google.android.gms.auth.api.Auth;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
@@ -381,6 +382,13 @@ public class MainActivity extends AppCompatActivity
                             });
                 }
             }
+        } else if (requestCode == REQUEST_INVITE) {
+            if (resultCode == RESULT_OK) {
+                String[] ids = AppInviteInvitation.getInvitationIds(resultCode, data);
+                Log.d(TAG, "onActivityResult: " + ids.length);
+            } else {
+                Log.d(TAG, "onActivityResult: Failed to send invitation.");
+            }
         }
     }
 
@@ -418,6 +426,10 @@ public class MainActivity extends AppCompatActivity
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
+            case R.id.invite_menu:
+                sendInvitation();
+                return true;
+
             case R.id.fresh_config_menu:
                 fetchConfig();
                 return true;
@@ -519,9 +531,17 @@ public class MainActivity extends AppCompatActivity
 
     private void applyRetrievedLengthLimit() {
         Long friendly_msg_length = firebaseRemoteConfig.getLong("friendly_msg_length");
-        mMessageEditText.setFilters(new InputFilter[] {
+        mMessageEditText.setFilters(new InputFilter[]{
                 new InputFilter.LengthFilter(friendly_msg_length.intValue())
         });
         Log.d(TAG, "applyRetrievedLengthLimit: " + friendly_msg_length);
+    }
+
+    private void sendInvitation() {
+        Intent intent = new AppInviteInvitation.IntentBuilder(getString(R.string.invitation_title))
+                .setMessage(getString(R.string.invitation_message))
+                .setCallToActionText(getString(R.string.invitation_cta))
+                .build();
+        startActivityForResult(intent, REQUEST_INVITE);
     }
 }
