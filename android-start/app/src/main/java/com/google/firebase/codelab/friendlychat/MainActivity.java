@@ -50,6 +50,8 @@ import com.google.android.gms.auth.api.Auth;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.appindexing.Action;
 import com.google.firebase.appindexing.FirebaseAppIndex;
@@ -63,9 +65,14 @@ import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.remoteconfig.FirebaseRemoteConfig;
+import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 import com.google.firebase.storage.UploadTask;
+
+import java.util.HashMap;
+import java.util.Map;
 
 import de.hdodenhof.circleimageview.CircleImageView;
 
@@ -116,6 +123,9 @@ public class MainActivity extends AppCompatActivity
     // Read firebase data
     private DatabaseReference databaseReference;
     private FirebaseRecyclerAdapter<FriendlyMessage, MessageViewHolder> adapter;
+
+    // Remote Config
+    private FirebaseRemoteConfig firebaseRemoteConfig;
     //---
 
     @Override
@@ -155,6 +165,23 @@ public class MainActivity extends AppCompatActivity
         mLinearLayoutManager = new LinearLayoutManager(this);
         mLinearLayoutManager.setStackFromEnd(true);
         mMessageRecyclerView.setLayoutManager(mLinearLayoutManager);
+
+        // Remote config
+        firebaseRemoteConfig = FirebaseRemoteConfig.getInstance();
+
+        FirebaseRemoteConfigSettings firebaseRemoteConfigSettings =
+                new FirebaseRemoteConfigSettings.Builder()
+                        .setDeveloperModeEnabled(true)
+                        .build();
+
+        Map<String, Object> defaultConfigMap = new HashMap<>();
+        defaultConfigMap.put("friendly_msg_length", 10L);
+
+        firebaseRemoteConfig.setConfigSettings(firebaseRemoteConfigSettings);
+        firebaseRemoteConfig.setDefaults(defaultConfigMap);
+
+        fetchConfig();
+        //---
 
         // New child entries
         // mProgressBar.setVisibility(ProgressBar.INVISIBLE);
@@ -391,6 +418,10 @@ public class MainActivity extends AppCompatActivity
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
+            case R.id.fresh_config_menu:
+                fetchConfig();
+                return true;
+
             case R.id.sign_out_menu:
                 firebaseAuth.signOut();
                 Auth.GoogleSignInApi.signOut(mGoogleApiClient);
@@ -462,5 +493,35 @@ public class MainActivity extends AppCompatActivity
                 )
                 .setMetadata(new Action.Metadata.Builder().setUpload(false))
                 .build();
+    }
+
+    public void fetchConfig() {
+        long cacheExpiration = 3600;
+        if (firebaseRemoteConfig.getInfo().getConfigSettings().isDeveloperModeEnabled())
+            cacheExpiration = 0;
+
+        firebaseRemoteConfig.fetch(cacheExpiration)
+                .addOnSuccessListener(new OnSuccessListener<Void>() {
+                    @Override
+                    public void onSuccess(Void aVoid) {
+                        firebaseRemoteConfig.activateFetched();
+                        applyRetrievedLengthLimit();
+                    }
+                })
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        Log.w(TAG, "onFailure: Error fetching config: " + e.getMessage());
+                        applyRetrievedLengthLimit();
+                    }
+                });
+    }
+
+    private void applyRetrievedLengthLimit() {
+        Long friendly_msg_length = firebaseRemoteConfig.getLong("friendly_msg_length");
+        mMessageEditText.setFilters(new InputFilter[] {
+                new InputFilter.LengthFilter(friendly_msg_length.intValue())
+        });
+        Log.d(TAG, "applyRetrievedLengthLimit: " + friendly_msg_length);
     }
 }
