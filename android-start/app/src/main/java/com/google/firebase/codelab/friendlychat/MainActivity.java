@@ -178,9 +178,10 @@ public class MainActivity extends AppCompatActivity
             protected void onBindViewHolder(final MessageViewHolder holder, int position, FriendlyMessage model) {
                 mProgressBar.setVisibility(View.INVISIBLE);
                 if (model.getText() != null) {
-                    holder.messageTextView.setText(model.getText());
+                    holder.messageTextView.setText(model.getName());
                     holder.messageTextView.setVisibility(View.VISIBLE);
                     holder.messageImageView.setVisibility(View.GONE);
+                    holder.messengerTextView.setText(model.getText());
                 } else {
                     String imageUrl = model.getImageUrl();
 
@@ -197,6 +198,7 @@ public class MainActivity extends AppCompatActivity
                                             .into(holder.messageImageView);
                                 } else {
                                     Log.w(TAG, "onComplete: Getting download url was not successful!", task.getException());
+                                    holder.messengerTextView.setVisibility(View.GONE);
                                 }
                             }
                         });
@@ -221,7 +223,7 @@ public class MainActivity extends AppCompatActivity
                 } else {
                     Glide.with(MainActivity.this)
                             .load(model.getPhotoUrl())
-                            .into(holder.messageImageView);
+                            .into(holder.messengerImageView);
                 }
 
                 // add messages to on-device index
