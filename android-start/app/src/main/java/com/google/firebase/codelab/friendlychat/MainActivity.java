@@ -54,6 +54,7 @@ import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
+import com.google.firebase.analytics.FirebaseAnalytics;
 import com.google.firebase.appindexing.Action;
 import com.google.firebase.appindexing.FirebaseAppIndex;
 import com.google.firebase.appindexing.FirebaseUserActions;
@@ -127,6 +128,9 @@ public class MainActivity extends AppCompatActivity
 
     // Remote Config
     private FirebaseRemoteConfig firebaseRemoteConfig;
+
+    // Analytics
+    private FirebaseAnalytics firebaseAnalytics;
     //---
 
     @Override
@@ -183,6 +187,8 @@ public class MainActivity extends AppCompatActivity
 
         fetchConfig();
         //---
+
+        firebaseAnalytics = FirebaseAnalytics.getInstance(this);
 
         // New child entries
         // mProgressBar.setVisibility(ProgressBar.INVISIBLE);
@@ -384,9 +390,21 @@ public class MainActivity extends AppCompatActivity
             }
         } else if (requestCode == REQUEST_INVITE) {
             if (resultCode == RESULT_OK) {
+                // Analytics
+                Bundle payLoad = new Bundle();
+                payLoad.putString(FirebaseAnalytics.Param.VALUE, "sent");
+                firebaseAnalytics.logEvent(FirebaseAnalytics.Event.SHARE, payLoad);
+                //---
+
                 String[] ids = AppInviteInvitation.getInvitationIds(resultCode, data);
                 Log.d(TAG, "onActivityResult: " + ids.length);
             } else {
+                // Analytics
+                Bundle payLoad = new Bundle();
+                payLoad.putString(FirebaseAnalytics.Param.VALUE, "not sent");
+                firebaseAnalytics.logEvent(FirebaseAnalytics.Event.SHARE, payLoad);
+                //---
+
                 Log.d(TAG, "onActivityResult: Failed to send invitation.");
             }
         }
