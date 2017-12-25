@@ -51,6 +51,12 @@ import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
+import com.google.firebase.appindexing.Action;
+import com.google.firebase.appindexing.FirebaseAppIndex;
+import com.google.firebase.appindexing.FirebaseUserActions;
+import com.google.firebase.appindexing.Indexable;
+import com.google.firebase.appindexing.builders.Indexables;
+import com.google.firebase.appindexing.builders.PersonBuilder;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.DataSnapshot;
@@ -217,6 +223,18 @@ public class MainActivity extends AppCompatActivity
                             .load(model.getPhotoUrl())
                             .into(holder.messageImageView);
                 }
+
+                // add messages to on-device index
+                if (model.getText() != null) {
+                    // write this message to the on-device index
+                    FirebaseAppIndex.getInstance()
+                            .update(getMessageIndexable(model));
+                }
+
+                // log a view action on it
+                FirebaseUserActions.getInstance()
+                        .end(getMessageViewAction(model));
+                //---
             }
 
             @Override
@@ -412,5 +430,35 @@ public class MainActivity extends AppCompatActivity
                         }
                     }
                 });
+    }
+
+    private Indexable getMessageIndexable(FriendlyMessage friendlyMessage) {
+        PersonBuilder sender = Indexables.personBuilder()
+                .setIsSelf(mUsername.equals(friendlyMessage.getName()))
+                .setName(friendlyMessage.getName())
+                .setUrl(MESSAGE_URL.concat(friendlyMessage.getId() + "/sender"));
+
+        PersonBuilder recipient = Indexables.personBuilder()
+                .setName(mUsername)
+                .setUrl(MESSAGE_URL.concat(friendlyMessage.getId() + "recipient"));
+
+        Indexable messageToIndex = Indexables.messageBuilder()
+                .setName(friendlyMessage.getText())
+                .setUrl(MESSAGE_URL.concat(friendlyMessage.getId()))
+                .setSender(sender)
+                .setRecipient(recipient)
+                .build();
+
+        return messageToIndex;
+    }
+
+    private Action getMessageViewAction(FriendlyMessage friendlyMessage) {
+        return new Action.Builder(Action.Builder.VIEW_ACTION)
+                .setObject(
+                        friendlyMessage.getName(),
+                        MESSAGE_URL.concat(friendlyMessage.getId())
+                )
+                .setMetadata(new Action.Metadata.Builder().setUpload(false))
+                .build();
     }
 }
