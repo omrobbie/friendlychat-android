@@ -46,6 +46,8 @@ import com.bumptech.glide.Glide;
 import com.firebase.ui.database.FirebaseRecyclerAdapter;
 import com.firebase.ui.database.FirebaseRecyclerOptions;
 import com.firebase.ui.database.SnapshotParser;
+import com.google.android.gms.ads.AdRequest;
+import com.google.android.gms.ads.AdView;
 import com.google.android.gms.appinvite.AppInviteInvitation;
 import com.google.android.gms.auth.api.Auth;
 import com.google.android.gms.common.ConnectionResult;
@@ -131,6 +133,9 @@ public class MainActivity extends AppCompatActivity
 
     // Analytics
     private FirebaseAnalytics firebaseAnalytics;
+
+    // Ads
+    private AdView adView;
     //---
 
     @Override
@@ -189,6 +194,12 @@ public class MainActivity extends AppCompatActivity
         //---
 
         firebaseAnalytics = FirebaseAnalytics.getInstance(this);
+
+        // Ads
+        adView = (AdView) findViewById(R.id.adView);
+        AdRequest adRequest = new AdRequest.Builder().build();
+        adView.loadAd(adRequest);
+        //---
 
         // New child entries
         // mProgressBar.setVisibility(ProgressBar.INVISIBLE);
@@ -419,6 +430,7 @@ public class MainActivity extends AppCompatActivity
 
     @Override
     public void onPause() {
+        if (adView != null) adView.pause();
         adapter.stopListening();
         super.onPause();
     }
@@ -427,11 +439,13 @@ public class MainActivity extends AppCompatActivity
     public void onResume() {
         super.onResume();
         adapter.startListening();
+        if (adView != null) adView.resume();
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
+        if (adView != null) adView.destroy();
     }
 
     @Override
