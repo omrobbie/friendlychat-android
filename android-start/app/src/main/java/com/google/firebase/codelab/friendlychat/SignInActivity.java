@@ -21,6 +21,7 @@ import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.auth.api.Auth;
@@ -73,6 +74,9 @@ public class SignInActivity extends AppCompatActivity implements
 
         // Initialize FirebaseAuth
         firebaseAuth = firebaseAuth.getInstance();
+
+        TextView textView = (TextView) mSignInButton.getChildAt(0);
+        textView.setText("Sign In With Google Account");
     }
 
     @Override
