@@ -54,10 +54,12 @@ import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
+import com.google.firebase.storage.UploadTask;
 
 import de.hdodenhof.circleimageview.CircleImageView;
 
@@ -271,6 +273,16 @@ public class MainActivity extends AppCompatActivity
             @Override
             public void onClick(View view) {
                 // Send messages on click.
+                String message = mMessageEditText.getText().toString();
+                FriendlyMessage friendlyMessage = new FriendlyMessage(
+                        message,
+                        mUsername,
+                        mPhotoUrl,
+                        null
+                );
+                databaseReference.child(MESSAGES_CHILD).push()
+                        .setValue(friendlyMessage);
+                mMessageEditText.setText("");
             }
         });
 
@@ -279,8 +291,50 @@ public class MainActivity extends AppCompatActivity
             @Override
             public void onClick(View view) {
                 // Select image for image message on click.
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("image/*");
+                startActivityForResult(intent, REQUEST_IMAGE);
             }
         });
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        Log.d(TAG, "onActivityResult: requestCode=" + requestCode + ", resultCode=" + resultCode);
+
+        if (requestCode == REQUEST_IMAGE) {
+            if (resultCode == RESULT_OK) {
+                if (data != null) {
+                    final Uri uri = data.getData();
+                    Log.d(TAG, "onActivityResult: Uri=" + uri.toString());
+
+                    FriendlyMessage friendlyMessage = new FriendlyMessage(
+                            null,
+                            mUsername,
+                            mPhotoUrl,
+                            LOADING_IMAGE_URL
+                    );
+                    databaseReference.child(MESSAGES_CHILD).push()
+                            .setValue(friendlyMessage, new DatabaseReference.CompletionListener() {
+                                @Override
+                                public void onComplete(DatabaseError databaseError, DatabaseReference databaseReference) {
+                                    if (databaseError == null) {
+                                        String key = databaseReference.getKey();
+                                        StorageReference storageReference = FirebaseStorage.getInstance()
+                                                .getReference(firebaseUser.getUid())
+                                                .child(key)
+                                                .child(uri.getLastPathSegment());
+                                        putImageInStorage(storageReference, uri, key);
+                                    } else {
+                                        Log.w(TAG, "onComplete: Unable to write message to database.", databaseError.toException());
+                                    }
+                                }
+                            });
+                }
+            }
+        }
     }
 
     @Override
@@ -337,5 +391,26 @@ public class MainActivity extends AppCompatActivity
         // be available.
         Log.d(TAG, "onConnectionFailed:" + connectionResult);
         Toast.makeText(this, "Google Play Services error.", Toast.LENGTH_SHORT).show();
+    }
+
+    private void putImageInStorage(StorageReference storageReference, Uri uri, final String key) {
+        storageReference.putFile(uri)
+                .addOnCompleteListener(MainActivity.this, new OnCompleteListener<UploadTask.TaskSnapshot>() {
+                    @Override
+                    public void onComplete(@NonNull Task<UploadTask.TaskSnapshot> task) {
+                        if (task.isSuccessful()) {
+                            FriendlyMessage friendlyMessage = new FriendlyMessage(
+                                    null,
+                                    mUsername,
+                                    mPhotoUrl,
+                                    task.getResult().getMetadata().getDownloadUrl().toString()
+                            );
+                            databaseReference.child(MESSAGES_CHILD).child(key)
+                                    .setValue(friendlyMessage);
+                        } else {
+                            Log.w(TAG, "onComplete: Image upload task was not successful.", task.getException());
+                        }
+                    }
+                });
     }
 }
